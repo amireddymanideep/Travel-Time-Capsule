@@ -1,37 +1,160 @@
 # Travel Time Capsule
 
-A React and Vite frontend for creating travel memory capsules, revisiting trip
-timelines, and sharing photos and notes.
+A travel-memory application with a React/Vite frontend and a Java 21 Spring Boot
+REST API. Users can create private trip capsules, preserve notes and photos,
+record locations and expenses, and lock each capsule until its unlock date.
+User accounts are protected with Spring Security, JWT authentication, and
+BCrypt password hashing. PostgreSQL stores all application data, including
+uploaded photo data.
 
-## Local development
+## Project structure
 
-```sh
-npm ci
-npm run dev
+```text
+.
+├── backend/                  # Java 21, Spring Boot, PostgreSQL API
+│   ├── src/main/java/        # Controllers, entities, JWT security
+│   ├── src/main/resources/   # Application configuration and SQL migrations
+│   └── pom.xml
+├── src/                      # React frontend
+├── public/
+├── Dockerfile                # Multi-stage Java 21 container build
+├── netlify.toml
+└── .env.example
 ```
 
-The Vite development server proxies `/api` requests to `http://localhost:8080`.
-Start the backend separately for sign-in, capsule, and upload features.
+## Run locally
 
-## GitHub Pages deployment
+Requirements: Java 21, Maven 3.9+, Node.js 22+, npm, and PostgreSQL.
 
-The `Deploy to GitHub Pages` workflow builds the frontend and deploys it when
-changes are pushed to `main`. The Vite base path is configured for this
-repository, so the site is published at:
+1. Create a PostgreSQL database named `travel_capsule`.
+2. Start the API from the project root:
 
-<https://amireddymanideep.github.io/Travel-Time-Capsule/>
+   ```powershell
+   $env:DATABASE_URL="jdbc:postgresql://localhost:5432/travel_capsule"
+   $env:DATABASE_USERNAME="postgres"
+   $env:DATABASE_PASSWORD="your-local-password"
+   $env:JWT_SECRET="use-a-random-secret-at-least-32-characters-long"
+   mvn -f backend/pom.xml spring-boot:run
+   ```
 
-In the repository's **Settings → Pages**, set the build and deployment source
-to **GitHub Actions**. The first successful workflow run then publishes the
-site.
+3. In another terminal, start the frontend:
 
-GitHub Pages hosts only the frontend. To enable sign-in and capsule features,
-deploy the backend separately, then add the repository variable
-`VITE_API_BASE_URL` under **Settings → Secrets and variables → Actions →
-Variables**. Set it to the backend's public base URL (without a trailing
-slash), and allow the Pages site origin in the backend's CORS configuration.
-Leave the variable unset when no public API is available.
+   ```powershell
+   npm ci
+   npm run dev
+   ```
 
-If the workflow reports that a Pages site is not configured, verify that
-**Settings → Pages → Build and deployment** is set to **GitHub Actions** and
-saved, then push a commit to `main` to retry deployment.
+The Vite development server proxies `/api` to `http://localhost:8080`. The
+database schema is applied by Flyway at startup. The development JWT secret in
+`application.properties` is only a local fallback; always configure a unique
+`JWT_SECRET` in a deployed environment.
+
+## API overview
+
+| Method | Path | Authentication | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/users/register` | No | Create an account |
+| `POST` | `/api/users/login` | No | Authenticate and receive a JWT |
+| `GET` | `/api/health` | No | Health check |
+| `GET` | `/api/capsules` | Bearer token | List the signed-in user's capsules |
+| `GET` | `/api/capsules/timeline` | Bearer token | List capsules for the timeline |
+| `GET` | `/api/capsules/stats` | Bearer token | Return the user's capsule totals |
+| `GET` | `/api/capsules/{id}` | Bearer token | Read one owned capsule |
+| `POST` | `/api/capsules` | Bearer token | Create a capsule |
+| `DELETE` | `/api/capsules/{id}` | Bearer token | Delete one owned capsule |
+| `POST` | `/api/capsules/upload` | Bearer token | Stage an image for a capsule |
+
+The API derives ownership from the verified JWT, not from the submitted
+`userId`. Locked responses include trip title, destination, and dates, but omit
+photos, notes, expenses, companions, and other private memories until unlock.
+Image uploads return a data URL; the image is persisted in PostgreSQL with its
+capsule when the capsule is created. Keep image sizes small because PostgreSQL
+is being used for media as well as relational data.
+
+## Deployment
+
+Do not put Aiven database credentials, a JWT signing secret, or any other
+private value in source code, frontend environment variables, or Git. Set them
+as private environment variables in Render. The frontend only needs the public
+Render API URL.
+
+### 1. Create the Aiven PostgreSQL database
+
+Create a PostgreSQL service in Aiven and note its database name, host, port,
+username, and password from the Aiven console. Do not paste credentials into
+the repository. Construct the JDBC URL using the values Aiven provides:
+
+```text
+jdbc:postgresql://HOST:PORT/DATABASE?sslmode=require
+```
+
+The API runs Flyway migrations automatically on startup.
+
+### 2. Configure the backend port
+
+The application listens on Render's `PORT` environment variable and falls back
+to port `8080` locally. No frontend URL should be used as the backend port.
+
+### 3. Build and optionally smoke-test the Docker image
+
+From the repository root:
+
+```powershell
+docker build -t travel-time-capsule .
+```
+
+The root [`Dockerfile`](./Dockerfile) builds with Maven and Java 21, then
+packages the application in a smaller Java 21 runtime image.
+
+### 4. Push the source to GitHub
+
+Create a GitHub repository if needed, add it as the `origin` remote, then push
+the project branch:
+
+```powershell
+git add .
+git commit -m "Build Travel Time Capsule full-stack app"
+git push -u origin main
+```
+
+### 5. Deploy the backend to Render
+
+Create a **Web Service** connected to the GitHub repository and choose
+**Docker** as the runtime. Set the Dockerfile path to `./Dockerfile` and the
+Docker build context to the repository root.
+
+Add these environment variables under the Render service settings:
+
+| Key | Value |
+| --- | --- |
+| `DATABASE_URL` | Aiven JDBC URL from step 1, including `?sslmode=require` |
+| `DATABASE_USERNAME` | Aiven database username |
+| `DATABASE_PASSWORD` | Aiven database password |
+| `JWT_SECRET` | A unique random secret of at least 32 UTF-8 bytes |
+| `CORS_ALLOWED_ORIGINS` | Exact Netlify site origin, e.g. `https://your-site.netlify.app` |
+
+Render supplies `PORT`. Deploy and verify
+`https://YOUR-RENDER-SERVICE.onrender.com/api/health` returns
+`{"status":"ok"}`.
+
+### 6. Deploy the frontend to Netlify
+
+Create a Netlify site from the same GitHub repository. The included
+[`netlify.toml`](./netlify.toml) sets the build command to `npm run build` and
+the publish directory to `dist`. Set this site environment variable in Netlify:
+
+| Key | Value |
+| --- | --- |
+| `VITE_API_BASE_URL` | `https://YOUR-RENDER-SERVICE.onrender.com` (no trailing slash) |
+
+Trigger a new Netlify deploy after changing the variable. For a manual deploy,
+run `npm ci` and `npm run build`, then drag the generated `dist` folder into
+Netlify Drop. The frontend reads the Render URL from `VITE_API_BASE_URL`; there
+is no hard-coded localhost URL to replace.
+
+### 7. Confirm the deployed origins
+
+Use the exact deployed Netlify site origin in Render's
+`CORS_ALLOWED_ORIGINS` setting. If the Netlify site name or domain changes,
+update that Render variable and redeploy. The backend service's name does not
+need to match the Netlify site name.

@@ -8,8 +8,21 @@ function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("travel_capsule_user");
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    try {
+      const restoredUser = JSON.parse(saved);
+      return restoredUser.token ? restoredUser : null;
+    } catch {
+      return null;
+    }
   });
+  const apiFetch = async (path, options = {}) => {
+    const headers = new Headers(options.headers || {});
+    if (user?.token) headers.set("Authorization", `Bearer ${user.token}`);
+    const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    if (response.status === 401) setUser(null);
+    return response;
+  };
 
   // Auth States
   const [authMode, setAuthMode] = useState("login");
@@ -70,9 +83,9 @@ function App() {
     setLoadingCapsules(true);
     try {
       const [capsRes, statsRes, timelineRes] = await Promise.all([
-        fetch(`${API_BASE}/api/capsules?userId=${userId}`),
-        fetch(`${API_BASE}/api/capsules/stats?userId=${userId}`),
-        fetch(`${API_BASE}/api/capsules/timeline?userId=${userId}`)
+        apiFetch(`/api/capsules?userId=${userId}`),
+        apiFetch(`/api/capsules/stats?userId=${userId}`),
+        apiFetch(`/api/capsules/timeline?userId=${userId}`)
       ]);
 
       if (capsRes.ok) {
@@ -135,7 +148,7 @@ function App() {
         throw new Error(data.message || "Invalid credentials");
       }
 
-      setUser(data.user);
+      setUser({ ...data.user, token: data.token });
       setActiveTab("dashboard");
     } catch (err) {
       setAuthError(err.message);
@@ -224,7 +237,7 @@ function App() {
       formData.append("file", file);
 
       try {
-        const res = await fetch(`${API_BASE}/api/capsules/upload`, {
+        const res = await apiFetch("/api/capsules/upload", {
           method: "POST",
           body: formData
         });
@@ -275,7 +288,7 @@ function App() {
         userId: user.id
       };
 
-      const res = await fetch(`${API_BASE}/api/capsules`, {
+      const res = await apiFetch("/api/capsules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -402,7 +415,7 @@ function App() {
     // Fetch full capsule data from backend
     if (targetId) {
       try {
-        const res = await fetch(`${API_BASE}/api/capsules/${targetId}`);
+        const res = await apiFetch(`/api/capsules/${targetId}`);
         if (res.ok) {
           const data = await res.json();
           const finalUnlocked = isCapsuleUnlocked(data);
@@ -425,7 +438,7 @@ function App() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/capsules/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`/api/capsules/${id}`, { method: "DELETE" });
       if (res.ok) {
         if (selectedCapsule?.id === id) {
           setSelectedCapsule(null);
@@ -555,10 +568,11 @@ function App() {
               </div>
 
               <div className="form-group">
-                <label>Password (min 6 characters)</label>
+                <label>Password (min 8 characters)</label>
                 <input
                   type="password"
                   placeholder="Choose a secure password"
+                  minLength={8}
                   value={signupForm.password}
                   onChange={(e) => setSignupForm({ ...signupForm, password: e.target.value })}
                   required
