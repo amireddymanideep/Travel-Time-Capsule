@@ -26,7 +26,8 @@ to **GitHub Actions**. The first successful workflow run then publishes the
 site.
 
 GitHub Pages hosts only the frontend. To enable sign-in and capsule features,
-deploy the backend separately, configure the repository variable
-`VITE_API_BASE_URL` to its public base URL (without a trailing slash), and
-allow the Pages site origin in the backend's CORS configuration. Leave the
-variable unset when no public API is available.
+deploy the backend separately, then add the repository variable
+`VITE_API_BASE_URL` under **Settings → Secrets and variables → Actions →
+Variables**. Set it to the backend's public base URL (without a trailing
+slash), and allow the Pages site origin in the backend's CORS configuration.
+Leave the variable unset when no public API is available.
