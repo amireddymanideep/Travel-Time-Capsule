@@ -3,6 +3,7 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/Travel-Time-Capsule/',
   plugins: [react()],
   server: {
     port: 5173,
