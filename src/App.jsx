@@ -54,6 +54,11 @@ function App() {
   const [loadingCapsules, setLoadingCapsules] = useState(false);
   const [selectedCapsule, setSelectedCapsule] = useState(null);
   const [activeLightboxImg, setActiveLightboxImg] = useState(null);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantMessages, setAssistantMessages] = useState([]);
+  const [assistantInput, setAssistantInput] = useState("");
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantError, setAssistantError] = useState("");
 
   // Filter & Search
   const [filterMode, setFilterMode] = useState("all");
@@ -195,7 +200,36 @@ function App() {
     setCapsules([]);
     setTimeline([]);
     setSelectedCapsule(null);
+    setAssistantOpen(false);
+    setAssistantMessages([]);
     setActiveTab("dashboard");
+  };
+
+  const handleAssistantSubmit = async (event) => {
+    event.preventDefault();
+    const message = assistantInput.trim();
+    if (!message || assistantLoading) return;
+
+    setAssistantMessages((previous) => [...previous, { role: "user", content: message }]);
+    setAssistantInput("");
+    setAssistantError("");
+    setAssistantLoading(true);
+    try {
+      const response = await apiFetch("/api/assistant/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "The memory assistant could not respond.");
+      }
+      setAssistantMessages((previous) => [...previous, { role: "assistant", content: data.answer }]);
+    } catch (error) {
+      setAssistantError(error.message);
+    } finally {
+      setAssistantLoading(false);
+    }
   };
 
   // ==============================
@@ -1542,6 +1576,63 @@ function App() {
           </div>
         </div>
       )}
+
+      <div className="assistant-widget">
+        {assistantOpen && (
+          <section className="assistant-panel" role="dialog" aria-label="Travel memory assistant">
+            <header className="assistant-header">
+              <div>
+                <strong>Memory Assistant</strong>
+                <span>Ask about your unlocked trips</span>
+              </div>
+              <button
+                type="button"
+                className="assistant-close"
+                aria-label="Close assistant"
+                onClick={() => setAssistantOpen(false)}
+              >
+                ✕
+              </button>
+            </header>
+            <p className="assistant-privacy">
+              Only matching unlocked trip text is sent to OpenAI. Locked capsules and photos are excluded.
+            </p>
+            <div className="assistant-messages" aria-live="polite">
+              {assistantMessages.length === 0 && (
+                <p className="assistant-intro">Try “What did I write about my last trip?”</p>
+              )}
+              {assistantMessages.map((message, index) => (
+                <p className={`assistant-message ${message.role}`} key={`${message.role}-${index}`}>
+                  {message.content}
+                </p>
+              ))}
+              {assistantLoading && <p className="assistant-message assistant">Searching your memories…</p>}
+              {assistantError && <p className="assistant-error">{assistantError}</p>}
+            </div>
+            <form className="assistant-form" onSubmit={handleAssistantSubmit}>
+              <input
+                aria-label="Ask your travel memory assistant"
+                maxLength={1000}
+                value={assistantInput}
+                onChange={(event) => setAssistantInput(event.target.value)}
+                placeholder="Ask about your trips…"
+                disabled={assistantLoading}
+              />
+              <button type="submit" className="btn-primary" disabled={assistantLoading || !assistantInput.trim()}>
+                Send
+              </button>
+            </form>
+          </section>
+        )}
+        <button
+          type="button"
+          className="assistant-toggle"
+          aria-expanded={assistantOpen}
+          onClick={() => setAssistantOpen((open) => !open)}
+        >
+          ✨ Memory Assistant
+        </button>
+      </div>
 
       {/* LIGHTBOX FOR FULL PHOTO VIEW */}
       {activeLightboxImg && (

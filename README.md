@@ -47,7 +47,9 @@ Requirements: Java 21, Maven 3.9+, Node.js 22+, npm, and PostgreSQL.
 The Vite development server proxies `/api` to `http://localhost:8080`. The
 database schema is applied by Flyway at startup. The development JWT secret in
 `application.properties` is only a local fallback; always configure a unique
-`JWT_SECRET` in a deployed environment.
+`JWT_SECRET` in a deployed environment. To test the memory assistant locally,
+also set `OPENAI_API_KEY` in the backend terminal; never put it in a `VITE_`
+variable or commit it.
 
 ## API overview
 
@@ -63,6 +65,7 @@ database schema is applied by Flyway at startup. The development JWT secret in
 | `POST` | `/api/capsules` | Bearer token | Create a capsule |
 | `DELETE` | `/api/capsules/{id}` | Bearer token | Delete one owned capsule |
 | `POST` | `/api/capsules/upload` | Bearer token | Stage an image for a capsule |
+| `POST` | `/api/assistant/chat` | Bearer token | Ask about retrieved unlocked memories |
 
 The API derives ownership from the verified JWT, not from the submitted
 `userId`. Locked responses include trip title, destination, and dates, but omit
@@ -70,6 +73,15 @@ photos, notes, expenses, companions, and other private memories until unlock.
 Image uploads return a data URL; the image is persisted in PostgreSQL with its
 capsule when the capsule is created. Keep image sizes small because PostgreSQL
 is being used for media as well as relational data.
+
+The memory assistant uses PostgreSQL full-text search to retrieve up to five
+relevant unlocked capsules for the authenticated user, then uses the OpenAI
+Chat Completions API to answer from those snippets. Locked capsules, photos,
+and account details are never sent. Since unlocked memory text is sent to
+OpenAI when the assistant is used, configure `OPENAI_API_KEY` privately in
+Render only if you want to enable the assistant. Without it, capsule features
+continue to work and the assistant endpoint reports that it is unavailable.
+`OPENAI_MODEL` is optional and defaults to `gpt-4o-mini`.
 
 ## Deployment
 
@@ -132,6 +144,8 @@ Add these environment variables under the Render service settings:
 | `DATABASE_PASSWORD` | Aiven database password |
 | `JWT_SECRET` | A unique random secret of at least 32 UTF-8 bytes |
 | `CORS_ALLOWED_ORIGINS` | Exact Netlify site origin, e.g. `https://your-site.netlify.app` |
+| `OPENAI_API_KEY` | OpenAI API key; required only for the memory assistant |
+| `OPENAI_MODEL` | Optional model name; defaults to `gpt-4o-mini` |
 
 Render supplies `PORT`. Deploy and verify
 `https://YOUR-RENDER-SERVICE.onrender.com/api/health` returns

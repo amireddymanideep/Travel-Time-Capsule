@@ -6,6 +6,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
@@ -24,5 +25,11 @@ public class ApiExceptionHandler {
         String message = fieldError == null ? "Request validation failed."
                 : fieldError.getField() + ": " + fieldError.getDefaultMessage();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", message));
+    }
+
+    @ExceptionHandler(RestClientException.class)
+    public ResponseEntity<Map<String, String>> handleAiService(RestClientException exception) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(Map.of(
+                "message", "The AI service request failed. Check the OpenAI configuration and try again."));
     }
 }
