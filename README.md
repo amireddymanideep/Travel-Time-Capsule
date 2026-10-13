@@ -31,3 +31,7 @@ deploy the backend separately, then add the repository variable
 Variables**. Set it to the backend's public base URL (without a trailing
 slash), and allow the Pages site origin in the backend's CORS configuration.
 Leave the variable unset when no public API is available.
+
+If the workflow reports that a Pages site is not configured, verify that
+**Settings → Pages → Build and deployment** is set to **GitHub Actions** and
+saved, then push a commit to `main` to retry deployment.
